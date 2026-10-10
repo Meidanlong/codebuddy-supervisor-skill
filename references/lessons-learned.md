@@ -1,0 +1,71 @@
+# Lessons Learned
+
+踩过的坑、验证过的做法，逐条追加，不覆盖。
+
+## 怎么查 CodeBuddy 模型价格（模型目录 + 倍率）
+
+**结论：不要硬记价格。** 价格/倍率随官方调整，一律以本机账号级缓存文件实时拉取为准。
+
+### 数据源 1（首选）：账号级缓存 `~/.codebuddy/local_storage/entry_*.info`
+
+- 目录：`~/.codebuddy/local_storage/`
+- 每个 `entry_<hash>.info` 是一个 JSON 数组，形如 `[{"userId":..., "data":{...}, "ts":...}]`
+- 模型目录在 `data.models[]`，是**当前账号**能用的完整模型清单（含账号专属/未公开模型）
+- 挑最新文件即可：`ls -t ~/.codebuddy/local_storage/entry_*.info | head -1`，再按体积/修改时间选（模型目录条目通常较大）
+
+每个模型的字段：
+
+| 字段 | 含义 |
+|---|---|
+| `id` | 模型标识（如 `space-bunny`、`deepseek-v4-pro`） |
+| `name` | 展示名 |
+| `credits` | **相对倍率**（如 `x0.08 credits`），用来算价格 |
+| `reasoning` | 推理配置（`effort`/`supportedEfforts`/`summary`/`canDisableThinking`） |
+| `supportsImages` | 是否支持图片输入 |
+| `maxInputTokens` / `maxOutputTokens` / `maxAllowedSize` | 上下文与输出上限 |
+| `tags` | 标签（部分模型有） |
+| `descriptionEn` / `descriptionZh` | 官方描述 |
+| `vendor` | 供应商**代码**（`e`/`f`/`j`/`i`/`v`/`tencent`），不是公司名 |
+| `relatedModels` | lite / reasoning / builtin-lite 的关联模型 |
+
+快速提取某模型的完整条目：
+
+```bash
+python3 - <<'PY'
+import json, glob, os
+f = max(glob.glob(os.path.expanduser('~/.codebuddy/local_storage/entry_*.info')), key=os.path.getmtime)
+d = json.load(open(f))
+for m in d[0]['data']['models']:
+    if m.get('id') == 'space-bunny':
+        print(json.dumps(m, ensure_ascii=False, indent=2))
+PY
+```
+
+### 数据源 2（补充）：npm 包内 `product*.json`
+
+- 路径：`~/.nvm/versions/node/v22.22.0/lib/node_modules/@tencent-ai/codebuddy-code/`
+  - 注意：包名是 **`codebuddy-code`**，不是 `codebuddy`
+- 文件：`product.json` / `product.cloudhosted.json` / `product.internal.json` / `product.ioa.json` / `product.selfhosted.json`
+- 这些是**内置默认模型目录**（fallback），也有 `credits` / `vendor` 字段，可作为兜底
+- **局限**：不含账号专属/未公开模型（例如 `space-bunny` 只在 `entry_*.info` 里有，product*.json 里查不到）
+
+### 查不到的地方（别浪费时间）
+
+- **官方定价页**（`copilot.tencent.com/pricing`）和**文档站**（`codebuddy.ai/docs`）都是 SPA，`curl` 抓不到每模型价格，只会拿到空壳 HTML
+- `vendor` 是内部代码，包内没有代码→公司名的对照表，别硬猜
+
+### 原则
+
+1. **以 `entry_*.info` 实时拉取为准**，不写死价格/倍率。
+2. 倍率是相对值（`x0.08 credits` 这类），要和套餐积分一起算才能换算成钱。
+3. 需要跨账号/新装环境验证时，先看 `entry_*.info`，再用 `product*.json` 兜底。
+
+## 模型失效时的处理
+
+当 CodeBuddy 报告某个已配置模型被撤销、不可用、或不在模型列表里时（注意：限流/限额/超时不算，那是临时问题，切兜底即可），执行以下步骤：
+
+1. 重新读取 `~/.codebuddy/local_storage/entry_*.info` 缓存文件，拉取最新模型目录
+2. 把完整模型表（模型名/倍率/推理/图像/上下文）按倍率排序打屏给用户
+3. 让用户重新选主力/编码/兜底三档模型
+4. 不要自己拍板换模型，等用户决定
+5. 更新 `SKILL.md` 和 `models.md` 里的模型配置
