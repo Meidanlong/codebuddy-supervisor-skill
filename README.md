@@ -11,6 +11,13 @@
 
 豆包负责"想清楚"和"把关"，CodeBuddy 负责"动手做"。豆包只做需求澄清、方案评审和结果验收，把实际的读写文件、执行命令、跑测试等重活交给 CodeBuddy，从而把昂贵的豆包 token 省下来。
 
+## 核心协作原则
+
+- **三层协作（你 → 我 → CodeBuddy）**：你提需求与拍板，豆包只做澄清 / 审方案 / 验收，CodeBuddy 负责动手。
+- **所有任务先出方案再执行**：不论只读还是有副作用，都先让 CodeBuddy 给出方案，确认后再动手。
+- **删除 / 卸载 / 改配置走三步审核法**：列清单 → 交你审核 → 确认后执行，不可逆操作不绕过。
+- **经验反馈闭环**：每次任务后把踩坑与有效做法沉淀进 `references/lessons-learned.md`，下次执行前先查。
+
 ## 模型配置
 
 CodeBuddy CLI 支持灵活配置底层模型，按成本与场景选择。三档制：
@@ -41,12 +48,14 @@ CodeBuddy CLI 支持灵活配置底层模型，按成本与场景选择。三档
 
 ```
 doubao-supervises-codebuddy/
-├── SKILL.md              # 豆包侧技能定义
+├── SKILL.md              # 豆包侧技能定义（含三层协作 / 三步审核法 / 经验闭环）
 ├── README.md             # 本文件
 ├── scripts/
-│   └── cb_run.sh         # 调用 CodeBuddy CLI 的封装脚本
+│   ├── cb_run.sh         # 调用 CodeBuddy CLI 的封装脚本
+│   └── fetch_pricing.sh  # 抓取官方定价页、抽取价格关键词
 └── references/
-    └── models.md         # 模型档位与成本参考
+    ├── models.md         # 模型档位与成本参考（不写死价格）
+    └── lessons-learned.md# 踩坑与验证过的做法（持续沉淀）
 ```
 
 ## License
