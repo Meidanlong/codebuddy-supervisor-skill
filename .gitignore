@@ -1,0 +1,8 @@
+# 本地维护、不进远程的文件
+
+# Session 映射表：记录本机实际的「业务方向 → session 名」对应情况，不外传。
+# 规范本身写在 SKILL.md「Session 管理」章节，所以忽略本文件不影响 skill 可用。
+references/sessions.md
+
+# macOS
+.DS_Store

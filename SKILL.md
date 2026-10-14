@@ -108,6 +108,7 @@ description: 以"监督者模式"调用本机 CodeBuddy CLI 执行编码任务�
 
 ```bash
 cd <项目目录> && codebuddy -p --output-format text --permission-mode bypassPermissions --model hy3 \
+  --session-id <业务方向 session 名，见「Session 管理」> \
   --disallowedTools "Bash(rm -rf ~:*)" \
   --disallowedTools "Bash(rm -rf /:*)" \
   --disallowedTools "Bash(sudo:*)" \
@@ -130,6 +131,53 @@ cd <项目目录> && codebuddy -p --output-format text --permission-mode bypassP
 1. **让 CodeBuddy 贴证据**：改过的文件路径 + 关键内容片段、跑过的命令 + 输出、测试结果。
 2. **对照方案核对**：它说改的是不是用户要的，有没有多做。
 3. **汇报**：用一段话告诉用户——CodeBuddy 做了什么、证据是什么、结果对不对、还有什么疑点、以及有没有需要用户自己确认或执行的最后一步。
+
+## Session 管理
+
+`codebuddy -p` 每次默认开一个新 session，上下文不互通。同一个业务方向反复派活时，用**固定的 `--session-id`** 能让 CodeBuddy 沿用上次的上下文（已实测：两次独立 `-p` 调用用同一个 id，第二次能准确答出第一次告诉它的事实），省掉每次重新交代背景的 token 和轮次。
+
+### 1. session 名按业务方向命名
+
+- **kebab-case、简短、能看出业务方向**，如 `drama-pipeline`、`cb-supervisor`、`system-maintenance`。
+- 合法性：CLI 的 `--session-id` 只允许字母/数字/连字符/下划线/冒号，且**必须以字母或数字开头**——所以别用中文、别用空格、别用前导 `-`。
+- 名跟着**业务方向**走，不跟着单次任务、日期或工单号走。
+
+### 2. 同一业务方向用同一个 session 名
+
+这是本节的核心：**同一业务方向的历次任务都用同一个 session 名**，从而保留历史上下文记忆（项目结构、约定、已做过的改动、踩过的坑）。下次派活时 CodeBuddy 不用从零摸索。
+
+反过来说，**不要为每次任务新起 session 名**——那样每次都丢上下文，等于把 session 机制白做。
+
+### 3. 新业务方向才新建 session 名
+
+判断标准是**业务方向变了**，而不是"这次任务不一样"。同一方向下的不同任务（改代码 / 查状态 / 跑测试）都用同一个名字。
+
+### 4. 映射表：`references/sessions.md`
+
+业务方向 → session 名的对应关系维护在 `references/sessions.md`：
+
+- **本地维护**，已加进 `.gitignore`，**不进远程仓库**（里面记的是本机实际情况，别外传）。
+- 但**规范写在本文档这一节**，所以即使映射表是空的、或者换台机器，规范照样有效——表只是"当前这台机器填了哪些"的记录。
+
+### 5. 每次新任务先查表，表里没有先问用户
+
+流程：
+
+1. **先 Read `references/sessions.md`**，判断这次任务属于哪个业务方向。
+2. 表里**有** → 直接用该方向已定的 session 名派发，不要另起名字。
+3. 表里**没有**（新业务方向）→ **先问用户**：这算新方向吗？要不要新建一个 session 名、叫什么？用户确认后再建、派发，并**把新行追加进 `references/sessions.md`**。
+
+不确定归属时按「硬约束 → 判断职责」处理：这属于**业务决策**（归属哪个方向），要问用户，不自己拍板。但明显的同一方向别反复问——查表命中就直接用。
+
+### 6. 派发时按业务方向传，不硬编码
+
+命令里写表里查到的 session 名：
+
+```bash
+codebuddy -p --model hy3 --session-id drama-pipeline --output-format text "<任务描述>"
+```
+
+**不硬编码**：不要把某个 session 名写死在通用命令/脚本模板里当常量（`scripts/cb_run.sh` 这类），也不要每次临时拍脑袋编一个——一律以 `references/sessions.md` 查到的为准。
 
 ## 速度优化（质量优先）
 
@@ -296,6 +344,7 @@ CodeBuddy 执行**超过预期时长仍无新进展 / 无新证据**时，豆包
 - **CodeBuddy 自报"完成了"不算数**，必须让它贴证据（文件片段、命令输出、测试结果）我据此验收。
 - **不可逆操作（push 到共享/受保护分支、force push）要先跟用户确认意图**，不要自作主张，也不要尝试拆命令/换脚本/提权绕过系统安全策略。
 - **不要替 CodeBuddy 规划执行步骤**：我只转述用户的目标（自然语言），不教它跑什么命令、按什么顺序。让它自己从零想怎么做，我审它的思路和结果。我替它规划=我的 token 花在了执行层，省不下来。
+- **同一业务方向要复用同一个 session 名**：每次都新起 session 等于丢掉上下文记忆，白白多花 token 交代背景。派发前先查 `references/sessions.md`，新业务方向先问用户。
 
 ## 实战记录
 
