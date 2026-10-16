@@ -199,7 +199,7 @@ codebuddy -p --model hy3 --session-id drama-pipeline --output-format text "<任�
 
 ### 3. 减少 token 浪费
 
-- **`--max-turns` 限制轮次**：防止 agent 陷入死循环/反复试探烧 token。
+- **不设 `--max-turns` 上限**：靠任务拆小、指令精确来控制轮次，不靠掐上限。CodeBuddy CLI 默认有个轮次上限（实测约 30 轮），如果任务确实复杂被掐了，就把任务拆成更小的步骤分次派发，而不是硬拉高上限。
 - **`--autocompact auto` 已写进命令模板（默认必加）**：同一 session 复用多次后上下文会越滚越大，`auto` 模式跟随模型窗口自动压缩，避免历史拖垮每次调用、也避免子 agent 被旧上下文带跑偏（实测：不加时 `cb-supervisor` session 膨胀后，验证任务被历史上下文带偏、自己跑去做 git commit）。
 - **任务描述要精确**：明确说改哪个文件、要达到什么效果；**不要说"改进这个代码库"这种模糊话**，否则它到处乱扫、读一堆无关文件。
 
