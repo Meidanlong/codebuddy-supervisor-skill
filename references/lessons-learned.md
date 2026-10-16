@@ -92,3 +92,29 @@ PY
 - **验收必须贴证据**：CodeBuddy 自报「完成」不算数，要它把文件片段 / 命令输出 / 测试结果打屏核对。
 - **不可逆操作先确认意图**：push 到共享 / 受保护分支、force push、生产写操作，先与用户确认再执行，不绕过、不拆命令或换脚本规避系统安全策略。
 - **只读轻活也要先出方案**：哪怕只是查状态，也先让 CodeBuddy 给一句「目标 + 只读检查清单」过目，不悄无声息直接跑。
+
+## `-p` 模式下写不了文件的坑（重要）
+
+**现象**：`codebuddy -p` 调用时，CodeBuddy 能读文件、能分析，但一写文件就静默失败，git status 里看不到任何改动。
+
+**原因**：光加 `--permission-mode bypassPermissions` 不够。官方文档明确：**`-p/--print` 非交互模式下，必须额外加 `--dangerously-skip-permissions`（或 `-y`）参数**，否则文件写、命令执行等需要授权的操作全被拦截。
+
+**为什么这么隐蔽**：这个失败**不报错、不非零退出**。CodeBuddy 会正常返回一段"已完成"的自述，但文件根本没落盘。所以它能骗过"看它自报完成"的验收方式——**必须用 `git status` / `ls` 之类外部手段核对文件是否真的存在**，别只看它的文字汇报。
+
+**两个参数的关系**（别混淆）：
+
+| 参数 | 作用 | 能替代 `--dangerously-skip-permissions` 吗 |
+|---|---|---|
+| `--permission-mode <mode>` | 交互模式下的权限策略（`bypassPermissions` / `dontAsk` / `default` 等） | ❌ 不能 |
+| `--dangerously-skip-permissions`（`-y`） | 跳过权限确认，`-p` 下授权操作得以执行 | —— 就是它 |
+| `--disallowedTools` | 黑名单，拦危险命令 | ❌ 不相干，照常要带 |
+
+> `codebuddy --help` 对该参数的说明：`Bypass permission prompts (HIGH/CRITICAL still ask)`。
+> 即**高危/严重级别仍会询问**，所以真正的黑名单防线要靠 `--disallowedTools` 兜住，别只依赖这个开关。
+
+**正确命令模板**：
+```bash
+codebuddy -p --output-format text --dangerously-skip-permissions --model <模型> --session-id <session> "<任务>"
+```
+
+**验证**：2026-10-16 实测，加上 `--dangerously-skip-permissions` 后 CodeBuddy 成功写入文件，git status 能看到改动。同日复测：不加该参数时，CodeBuddy 自报完成但 `git status` 干净，确认是静默拦截而非报错。

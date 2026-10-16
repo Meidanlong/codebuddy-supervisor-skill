@@ -43,7 +43,7 @@ done
 [[ $# -ge 3 ]] && MODEL="$3"
 [[ -z "$PROMPT" ]] && { echo "缺少任务描述" >&2; usage; }
 
-# 硬黑名单：即便 bypassPermissions 也通过 --disallowedTools 拦一道
+# 硬黑名单：即便跳过权限确认，也通过 --disallowedTools 拦一道
 # 语法参考 CodeBuddy: Bash(<prefix>:*) 匹配以该前缀开头的 shell 命令
 DISALLOWED=(
   "Bash(rm -rf ~:*)"
@@ -68,8 +68,10 @@ for d in "${DISALLOWED[@]}"; do
 done
 
 # 根据模式调整 prompt 和权限
+# 注意：-p 是非交互模式，exec 必须用 --dangerously-skip-permissions，
+# 否则写文件/执行命令会被静默拦截（--permission-mode bypassPermissions 不能替代它）。
 if [[ "$MODE" == "plan" ]]; then
-  PERM="dontAsk"
+  PERM_ARGS=(--permission-mode dontAsk)
   INSTRUCTION="$(cat <<'EOF'
 你现在只输出方案，不写任何文件、不执行任何 shell 命令。
 方案必须包含：
@@ -86,7 +88,7 @@ EOF
 === 任务 ===
 $PROMPT"
 else
-  PERM="bypassPermissions"
+  PERM_ARGS=(--dangerously-skip-permissions)
   INSTRUCTION="$(cat <<'EOF'
 开始执行任务。约束：
 - 不要写任何中间稿/思考过程类的 .md 文件，全部直接打屏输出。
@@ -113,7 +115,7 @@ BEFORE_FILES=$(ls -1 "$LOG_DIR" 2>/dev/null | sort)
 
 codebuddy -p \
   --output-format text \
-  --permission-mode "$PERM" \
+  "${PERM_ARGS[@]}" \
   --model "$MODEL" \
   "${DISALLOWED_ARGS[@]}" \
   "$FULL_PROMPT"

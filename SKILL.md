@@ -107,7 +107,7 @@ description: 以"监督者模式"调用本机 CodeBuddy CLI 执行编码任务�
 让 CodeBuddy 真正执行（带黑名单保护）：
 
 ```bash
-cd <项目目录> && codebuddy -p --output-format text --permission-mode bypassPermissions --model hy3 \
+cd <项目目录> && codebuddy -p --output-format text --dangerously-skip-permissions --model hy3 \
   --session-id <业务方向 session 名，见「Session 管理」> \
   --disallowedTools "Bash(rm -rf ~:*)" \
   --disallowedTools "Bash(rm -rf /:*)" \
@@ -125,6 +125,11 @@ cd <项目目录> && codebuddy -p --output-format text --permission-mode bypassP
 上面的示例是**默认/简单只读任务**（查状态、读日志、看 git log 这类轻活），用 `--model hy3`。
 **编码干活**（写代码、改文件、跑测试这类正经编码任务）把 `--model hy3` 换成 `--model space-bunny`。
 只有 `hy3` 撞到每日限额、不可用时，才切兜底 `--model glm-5.3-flash`；其余参数不变。
+
+> **`--dangerously-skip-permissions` 不能省。** `-p` 是非交互模式，没有弹窗让人点"同意"，
+> 所以凡是需要授权的操作（写文件、执行命令）一律被**静默拦截**——CodeBuddy 会回报"已完成"，
+> 但实际什么都没改。`--permission-mode bypassPermissions` **替代不了**这个参数，必须额外加上
+> （`-y` 是它的短别名）。详见「常见坑」第一条与 `references/lessons-learned.md`。
 
 执行完我做验收：
 
@@ -309,7 +314,7 @@ CodeBuddy 报回来的技术问题——**直接让它自己修了继续，不�
 
 ### 权限与黑名单
 
-- 执行模式用 `bypassPermissions`（用户已授权监督模式）。
+- **`-p` 非交互模式下必须加 `--dangerously-skip-permissions`（或 `-y`）**（用户已授权监督模式）。`-p` 没有交互弹窗可点"同意"，不加这个参数，写文件、执行命令等需要授权的操作会**被静默拦截**——CodeBuddy 看似跑完，实际什么都没改。注意 `--permission-mode bypassPermissions` **不能替代**它，两个不是一回事。
 - 通过 `--disallowedTools` 拦一道硬黑名单：`rm -rf ~/`、`rm -rf /`、`sudo`、`mkfs`、`dd if=`、`git push --force`、`git reset --hard`、`DROP DATABASE/TABLE`、`TRUNCATE`、fork bomb。
 - **自动 `git push origin <共享/受保护分支>` 不在黑名单里**，所以要在 prompt 里写清"push 前先确认用户意图"；被系统安全策略拦下时不要绕过，见上一节。
 - 真要解锁黑名单里的某个操作，用户必须显式说"这次允许 xxx"。
@@ -337,6 +342,7 @@ CodeBuddy 执行**超过预期时长仍无新进展 / 无新证据**时，豆包
 
 ## 常见坑
 
+- **`-p` 模式下光加 `--permission-mode bypassPermissions` 不够**：非交互模式必须额外加 `--dangerously-skip-permissions`（或 `-y`），否则文件写、命令执行等需要授权的操作全被**静默拦截**，CodeBuddy 看似跑完了但实际什么都没改。**这是最隐蔽的坑**——它不报错、不失败，验收时才发现改动没落盘。正确模板见第 4 步命令示例。
 - **CodeBuddy 在 `-p` 模式下遇到需要确认的操作会直接失败而不是等待**，方案阶段用 `dontAsk` 保证它只读不卡壳。
 - **`hy3` 有每日调用上限**，它是默认/只读档；撞到限额不可用时切兜底 `glm-5.3-flash`（编码任务本就该用 `space-bunny`）。
 - **不要改 `~/.codebuddy/settings.json` 的默认模型**，那是用户自己开 TUI 时的偏好；我只在派发命令时显式 `--model`。
