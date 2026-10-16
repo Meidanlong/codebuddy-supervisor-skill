@@ -107,7 +107,7 @@ description: 以"监督者模式"调用本机 CodeBuddy CLI 执行编码任务�
 让 CodeBuddy 真正执行（带黑名单保护）：
 
 ```bash
-cd <项目目录> && codebuddy -p --output-format text --dangerously-skip-permissions --model hy3 \
+cd <项目目录> && codebuddy -p --output-format text --dangerously-skip-permissions --autocompact auto --model hy3 \
   --session-id <业务方向 session 名，见「Session 管理」> \
   --disallowedTools "Bash(rm -rf ~:*)" \
   --disallowedTools "Bash(rm -rf /:*)" \
@@ -214,7 +214,7 @@ codebuddy -p --model hy3 --session-id drama-pipeline --output-format text "<任�
 ### 3. 减少 token 浪费
 
 - **`--max-turns` 限制轮次**：防止 agent 陷入死循环/反复试探烧 token。
-- **长任务用 `--autocompact` 控制上下文**：上下文膨胀时自动压缩，避免历史拖垮每次调用。
+- **`--autocompact auto` 已写进命令模板（默认必加）**：同一 session 复用多次后上下文会越滚越大，`auto` 模式跟随模型窗口自动压缩，避免历史拖垮每次调用、也避免子 agent 被旧上下文带跑偏（实测：不加时 `cb-supervisor` session 膨胀后，验证任务被历史上下文带偏、自己跑去做 git commit）。
 - **任务描述要精确**：明确说改哪个文件、要达到什么效果；**不要说"改进这个代码库"这种模糊话**，否则它到处乱扫、读一堆无关文件。
 
 ### 4. 质量红线（速度不能突破的底线）

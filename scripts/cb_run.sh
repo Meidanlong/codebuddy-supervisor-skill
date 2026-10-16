@@ -116,6 +116,7 @@ BEFORE_FILES=$(ls -1 "$LOG_DIR" 2>/dev/null | sort)
 codebuddy -p \
   --output-format text \
   "${PERM_ARGS[@]}" \
+  --autocompact auto \
   --model "$MODEL" \
   "${DISALLOWED_ARGS[@]}" \
   "$FULL_PROMPT"
