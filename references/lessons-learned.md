@@ -93,6 +93,20 @@ PY
 - **不可逆操作先确认意图**：push 到共享 / 受保护分支、force push、生产写操作，先与用户确认再执行，不绕过、不拆命令或换脚本规避系统安全策略。
 - **只读轻活也要先出方案**：哪怕只是查状态，也先让 CodeBuddy 给一句「目标 + 只读检查清单」过目，不悄无声息直接跑。
 
+## Docker CLI 版本太老连不上 colima 的修复
+
+**现象**：`docker ps` 报错 `Error response from daemon: client version 1.41 is too old. Minimum supported API version is 1.44`。
+
+**原因**：本机装的是 Docker Desktop 20.10.7（很老），但 colima 的 daemon 是新的（要求 API 1.44+）。两者不兼容。
+
+**修复**：用环境变量指定 socket + 降级 API 版本绕过：
+```bash
+export DOCKER_HOST=unix:///Users/meidanlong/.colima/default/docker.sock
+export DOCKER_API_VERSION=1.44
+```
+
+**注意**：这只是绕过版本检查，不是真的升级。长期建议 brew upgrade docker。
+
 ## `-p` 模式下写不了文件的坑（重要）
 
 **现象**：`codebuddy -p` 调用时，CodeBuddy 能读文件、能分析，但一写文件就静默失败，git status 里看不到任何改动。
