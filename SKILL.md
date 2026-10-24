@@ -227,6 +227,7 @@ cd <项目目录> && codebuddy -p --output-format text --dangerously-skip-permis
 
 ✅ **刚好的粒度**：
 - 一个完整功能点。比如"给 Controller 加个 list 接口，参考现有写法，编译跑通"。我验收看的是"这个接口能不能用"，不是"那一行改对没"。
+- **不要预设数量目标**：指令里别写"找出 9 个配置项""检查 15 个容器"这类硬编码数量；让 CodeBuddy 按实际枚举、发现多少报多少，避免为凑数编造条目或重复扫描。
 
 ---
 
@@ -276,6 +277,8 @@ codebuddy -p --model hy3 --session-id drama-pipeline --output-format text "<任�
 ```
 
 **不硬编码**：不要把某个 session 名写死在通用命令/脚本模板里当常量（`scripts/cb_run.sh` 这类），也不要每次临时拍脑袋编一个——一律以 `references/sessions.md` 查到的为准。
+
+**环境变量位置**：`export PATH=...` 这类环境变量必须写在 `codebuddy` 调用之前、引号之外，由 shell 执行；写进 prompt 的 `"<任务描述>"` 引号内不会被 shell 解析执行。
 
 ## 速度优化（质量优先）
 
@@ -465,6 +468,7 @@ CodeBuddy 执行**超过预期时长仍无新进展 / 无新证据**时，豆包
 - **session 上下文是否膨胀要观察，不要轻易拆新 session**：60 轮用完不一定是因为上下文大，可能就是任务大、读文件多。有 `--autocompact auto` 在，真到了 token 阈值会自动压缩。如果上下文本来就不大，拆新 session 反而浪费 token。只有当发现：同样大小的任务，越跑越慢、轮次消耗越来越快，才考虑开新 session。
 - **CodeBuddy 静默失败可以通过要求它输出验证信息来解决**：在 prompt 里明确要求"做完后必须列出改了哪些文件，最后跑 `git status` 贴出来"。这样就能验证它到底有没有真的改文件，而不是跑完了什么都没干。
 - **Docker 部署注意**：容器里跑的 jar 是打进镜像的，改完代码后要 `docker cp` 新 jar 进容器再重启，不是重启就生效。
+- **跨机 / SSH 任务必须区分本机与远程命令（详见 references/lessons-learned.md「远程服务器运维巡检」节）**：本机是 macOS，禁止在本机直接跑 docker、ss、systemctl、ps 等 Linux 命令；目标机命令一律带 SSH 包装，且先 `ssh ... 'hostname; uname -a'` 自证目标是远程主机并贴出输出，再继续后续命令。
 
 ## 实战记录
 
