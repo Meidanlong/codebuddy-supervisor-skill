@@ -4,5 +4,11 @@
 # 规范本身写在 SKILL.md「Session 管理」章节，所以忽略本文件不影响 skill 可用。
 references/sessions.md
 
+# 本机凭证：CODEBUDDY_API_KEY 等，绝不外传
+# （WorkBuddy 派生的进程读不到 macOS 钥匙串里的登录凭证，只能用 API Key 通道）
+.env.local
+.env
+.env.*
+
 # macOS
 .DS_Store

@@ -15,6 +15,20 @@
 #   cwd   = ~/workspace
 #   model = hy3 (免费, 0 积分)
 #
+# 本机适配（脚本自动处理，通常不用管）:
+#   CB_ENV_FILE      凭证文件路径，默认 <skill根>/.env.local（已被 .gitignore 忽略）
+#   CB_PORT          起始端口，默认 49211；被占用则自动向上探测（避开 WorkBuddy Electron 常占的 51803）
+#   CB_NO_PORT=1     不探测端口、不传 --port，回到上游原始行为
+#   CB_NODE_BIN_DIR  指定 node 的 bin 目录，默认自动优先用 nvm 最新版
+#   环境里已存在的变量优先，不会被 .env.local 覆盖
+#
+# 为什么需要这些:
+#   在 WorkBuddy 派生的进程里，CodeBuddy CLI 读不出 macOS 钥匙串中的登录凭证
+#   （日志 category=missing-key，hasAccessToken=false），表现为 "Authentication required"。
+#   改用 CODEBUDDY_API_KEY 走独立校验通道即可绕过。详见 references/lessons-learned.md。
+#
+# ===USAGE-END===
+#
 # 退出码:
 #   0  正常完成
 #   2  参数错误
@@ -29,8 +43,64 @@ MODEL="${CB_MODEL:-hy3}"
 SESSION_ID=""
 
 usage() {
-  sed -n '2,17p' "$0"
+  awk 'NR>1 && /^# ===USAGE-END===/ {exit} NR>1' "$0"
   exit 2
+}
+
+# ---- 本机适配：node 来源 ----
+# WorkBuddy 内置 node（~/.workbuddy/binaries/node/...）读不到凭证加密密钥，优先用 nvm 的 node。
+ensure_node() {
+  if [[ -n "${CB_NODE_BIN_DIR:-}" && -x "${CB_NODE_BIN_DIR}/node" ]]; then
+    export PATH="${CB_NODE_BIN_DIR}:$PATH"
+    return 0
+  fi
+  local cur nvm_bin
+  cur="$(command -v node 2>/dev/null || true)"
+  case "$cur" in
+    *".workbuddy/binaries"*)
+      nvm_bin="$(ls -d "$HOME"/.nvm/versions/node/*/bin 2>/dev/null | sort -V | tail -1)"
+      if [[ -n "$nvm_bin" && -x "$nvm_bin/node" ]]; then
+        export PATH="${nvm_bin}:$PATH"
+      else
+        echo "[cb_run] ⚠️  当前 node 来自 WorkBuddy 内置（$cur），未找到 nvm node，可能出现认证失败" >&2
+      fi
+      ;;
+  esac
+}
+
+# ---- 本机适配：凭证文件 ----
+# 只解析 KEY=VALUE，不用 source，避免执行文件中的任意代码；已存在的环境变量优先。
+load_env_file() {
+  local f="$1" line k v cur_val
+  [[ -f "$f" ]] || return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+    k="${line%%=*}"
+    v="${line#*=}"
+    k="${k%"${k##*[![:space:]]}"}"
+    [[ "$k" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+    v="${v%%$'\r'}"
+    v="${v#\"}"; v="${v%\"}"; v="${v#\'}"; v="${v%\'}"
+    eval "cur_val=\"\${$k:-}\""
+    [[ -n "$cur_val" ]] && continue
+    export "$k=$v"
+  done < "$f"
+}
+
+# ---- 本机适配：端口 ----
+port_in_use() {
+  lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1
+}
+
+pick_port() {
+  local p="$1" i=0
+  while [[ $i -lt 40 ]]; do
+    port_in_use "$p" || { echo "$p"; return 0; }
+    p=$((p + 1))
+    i=$((i + 1))
+  done
+  return 1
 }
 
 POSITIONAL=()
@@ -91,10 +161,30 @@ EOF
 $PROMPT"
 fi
 
+# 先做本机适配，再进目录、再调 CLI
+ensure_node
+SKILL_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+load_env_file "${CB_ENV_FILE:-$SKILL_ROOT/.env.local}"
+
+PORT_ARGS=()
+PICKED_PORT=""
+if [[ "${CB_NO_PORT:-}" != "1" ]]; then
+  if PICKED_PORT="$(pick_port "${CB_PORT:-49211}")"; then
+    PORT_ARGS=(--port "$PICKED_PORT")
+  else
+    echo "[cb_run] ⚠️  ${CB_PORT:-49211} 起连续 40 个端口均被占用，回退 CLI 默认端口" >&2
+    PICKED_PORT=""
+  fi
+fi
+
+if [[ -z "${CODEBUDDY_API_KEY:-}" ]]; then
+  echo "[cb_run] ⚠️  未加载到 CODEBUDDY_API_KEY，若出现 Authentication required，请检查 .env.local" >&2
+fi
+
 mkdir -p "$CWD"
 cd "$CWD" || { echo "无法进入目录: $CWD" >&2; exit 2; }
 
-echo "[cb_run] mode=$MODE model=$MODEL cwd=$CWD session=${SESSION_ID:-<none>}" >&2
+echo "[cb_run] mode=$MODE model=$MODEL cwd=$CWD session=${SESSION_ID:-<none>} port=${PICKED_PORT:-<default>} auth=$([[ -n "${CODEBUDDY_API_KEY:-}" ]] && echo api-key || echo login-state) node=$(command -v node 2>/dev/null || echo '?')" >&2
 
 # 记录执行前日志目录状态，执行后只扫描新增日志
 LOG_DIR="$HOME/.codebuddy/logs/$(date +%Y-%m-%d)"
@@ -107,6 +197,7 @@ SESSION_ARGS=()
 
 codebuddy -p \
   --output-format text \
+  "${PORT_ARGS[@]+"${PORT_ARGS[@]}"}" \
   "${PERM_ARGS[@]}" \
   --autocompact auto \
   "${SESSION_ARGS[@]+"${SESSION_ARGS[@]}"}" \

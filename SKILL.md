@@ -149,10 +149,16 @@ description: 以"监督者模式"调用本机 CodeBuddy CLI 执行编码任务�
 派发命令（默认 `--model hy3`，见「模型配置」表）：
 
 ```bash
-cd <项目目录> && codebuddy -p --output-format text --dangerously-skip-permissions --autocompact auto --model hy3 \
+# 前置：本机必需，缺一不可（口径见「硬约束 → 运行环境」；安装路径按实际调整）
+export PATH="$HOME/.nvm/versions/node/v22.22.0/bin:$PATH"
+set -a; source "$HOME/.workbuddy/skills/codebuddy-supervisor/.env.local"; set +a
+
+cd <项目目录> && codebuddy -p --port 49211 --output-format text --dangerously-skip-permissions --autocompact auto --model hy3 \
   --session-id <业务方向 session 名，见「Session 管理」> \
   "<单步任务描述；如涉及 push 到共享/受保护分支，先与用户确认意图再执行>"
 ```
+
+> 或者直接用 `scripts/cb_run.sh --exec "<任务>"`，它已内置上述三项前置与端口自动避让。
 
 > **`--dangerously-skip-permissions` 不能省。** `-p` 是非交互模式，没有弹窗让人点"同意"，
 > 所以凡是需要授权的操作（写文件、执行命令）一律被**静默拦截**——CodeBuddy 会回报"已完成"，
@@ -273,12 +279,12 @@ cd <项目目录> && codebuddy -p --output-format text --dangerously-skip-permis
 命令里写表里查到的 session 名：
 
 ```bash
-codebuddy -p --model hy3 --session-id drama-pipeline --output-format text "<任务描述>"
+codebuddy -p --port 49211 --model hy3 --session-id drama-pipeline --output-format text "<任务描述>"
 ```
 
 **不硬编码**：不要把某个 session 名写死在通用命令/脚本模板里当常量（`scripts/cb_run.sh` 这类），也不要每次临时拍脑袋编一个——一律以 `references/sessions.md` 查到的为准。
 
-**环境变量位置**：`export PATH=...` 这类环境变量必须写在 `codebuddy` 调用之前、引号之外，由 shell 执行；写进 prompt 的 `"<任务描述>"` 引号内不会被 shell 解析执行。
+**环境变量位置**：`export PATH=...`、`source .../.env.local` 这类前置必须写在 `codebuddy` 调用之前、引号之外，由 shell 执行；写进 prompt 的 `"<任务描述>"` 引号内不会被 shell 解析执行。本机必需的三项前置见「硬约束 → 运行环境」。
 
 ## 速度优化（质量优先）
 
@@ -403,6 +409,18 @@ CodeBuddy 报回来的技术问题——**直接让它自己修了继续，不�
 - CodeBuddy **不许写中间稿/思考过程类的 .md 文件**，直接打屏 stdout。
 - 任务交付物本身是 .md（README、设计文档）允许写，但方案阶段就要标出来。
 
+### 运行环境（本机必需前置）
+
+在这台机器（macOS + WorkBuddy 桌面端）上，`codebuddy -p` 有**三项前置缺一不可**，否则派发必失败。`scripts/cb_run.sh` 已全部内置，手工调原生命令时要自己带。
+
+| 前置 | 不做会怎样 | 为什么 |
+|---|---|---|
+| `CODEBUDDY_API_KEY`（存 `.env.local`，权限 600，已 gitignore） | `Authentication required. Please use /login` | WorkBuddy 派生的进程读不出 macOS 钥匙串里的登录凭证，日志 `category=missing-key`、`hasAccessToken=false`。API Key 走独立校验通道，不碰钥匙串 |
+| `--port 49211`（被占则 +1 探测） | `Error: listen EADDRINUSE 127.0.0.1:<port>` | 默认端口 51803 被 WorkBuddy 的 Electron 进程占着，且它会随机抢端口 |
+| PATH 前置 nvm 的 node | 认证失败（同第一条表现） | `codebuddy` 的 shebang 是 `#!/usr/bin/env node`，不前置会被 WorkBuddy 内置 node（`~/.workbuddy/binaries/node/...`）抢走 |
+
+**注意**：登录态本身没问题——同一个二进制、同一份凭证，在 Terminal 里能正常跑，只有从 WorkBuddy 派生的进程里才解不开。所以**不要**去重做 `/login`、不要重建 `~/.codebuddy/`，那是白费功夫。排查全过程与被证伪的假设清单见 `references/lessons-learned.md`「本机认证」节。
+
 ### 权限与黑名单
 
 - **`-p` 非交互模式下必须加 `--dangerously-skip-permissions`（或 `-y`）**（用户已授权监督模式）。`-p` 没有交互弹窗可点"同意"，不加这个参数，写文件、执行命令等需要授权的操作会**被静默拦截**——CodeBuddy 看似跑完，实际什么都没改。注意 `--permission-mode bypassPermissions` **不能替代**它，两个不是一回事。
@@ -457,11 +475,12 @@ CodeBuddy 执行**超过预期时长仍无新进展 / 无新证据**时，豆包
 
 ## 常见坑
 
+- **`Authentication required` 不等于没登录（本机排障第一大坑）**：从 WorkBuddy 派生的进程里读不出 macOS 钥匙串的凭证加密密钥，日志表现为 `category=missing-key`、`hasAccessToken=false`。此时重做 `/login`、重建 `~/.codebuddy/`、关沙箱、换 node 版本、摘环境变量**全都治不了**（已逐项实测证伪）。正解是 `CODEBUDDY_API_KEY` + `--port` + nvm node 三项前置，见「硬约束 → 运行环境」。判断依据：同一命令在 Terminal 里能跑、在 WorkBuddy 里不能跑，且日志有 `missing-key`。
 - **`-p` 模式下光加 `--permission-mode bypassPermissions` 不够**：非交互模式必须额外加 `--dangerously-skip-permissions`（或 `-y`），否则文件写、命令执行等需要授权的操作全被**静默拦截**，CodeBuddy 看似跑完了但实际什么都没改。**这是最隐蔽的坑**——它不报错、不失败，验收时才发现改动没落盘。正确模板见第 4 步命令示例。
 - **CodeBuddy 在 `-p` 模式下遇到需要确认的操作会直接失败而不是等待**，方案阶段用 `dontAsk` 保证它只读不卡壳。
 - **`hy3` 有每日调用上限**，撞到限额不可用时切兜底 `glm-5.3-flash`（见「模型配置」表）。
 - **不要改 `~/.codebuddy/settings.json` 的默认模型**，那是用户自己开 TUI 时的偏好；我只在派发命令时显式 `--model`。
-- **`cb_run.sh` 包装脚本对长指令 prompt 会让 hy3 返回空**，复杂任务直接调 `codebuddy -p` 原生命令，不用包装脚本。
+- **`cb_run.sh` 已内置本机三项前置（key 自动加载、端口避让、nvm node 前置）**，直接 `scripts/cb_run.sh --exec "<任务>"` 即可，不用手工带参数。上游曾记录「包装脚本对长指令 prompt 会让 hy3 返回空」，本机实测（codebuddy v2.170.0）`--plan` / `--exec` 带长指令均正常返回；若再遇到返回空，改用原生 `codebuddy -p` 并保留上面三项前置。
 - **验收口径见「角色分工」铁律3**：CodeBuddy 自报"完成"不算数，必须让它贴关键证据（文件片段 / 命令输出 / 测试结果）我据此核对。
 - **不可逆操作先验用户意图（规则见「不可逆操作：push 前先确认用户意图」章节）**：push / force push / 共享受保护分支，不要自作主张，也不要尝试拆命令/换脚本/提权绕过系统安全策略。
 - **不要替 CodeBuddy 规划执行步骤（完整口径见「阶段2：商讨方案」关键句）**：我只转述用户目标、不教它跑什么命令与顺序，让它自己决定，我审思路与结果。
